@@ -1,6 +1,12 @@
 //edit version
-
+#include <Servo.h>
 #include <ESP8266WiFi.h>
+
+#define servo_pin D1
+#define openDoorSwitch_pin D2
+#define greenLED_pin D0
+#define yellowLED_pin D4
+#define closeDoorTime 250
 
 // Enter your wifi network name and Wifi Password
 const char* ssid = "LLC-iPAD";
@@ -8,12 +14,12 @@ const char* password = "12qwaszx";
 
 // Set web server port number to 80
 WiFiServer server(80);
-
+Servo myservo;
 // Variable to store the HTTP request
 String header;
 
 // These variables store current output state of LED
-String outputRedState = "off";
+String doorOpenState = "off";
 
 // Assign output variables to GPIO pins
 const int redLED = 2;
@@ -25,27 +31,44 @@ unsigned long previousTime = 0;
 // Define timeout time in milliseconds (example: 2000ms = 2s)
 const long timeoutTime = 2000;
 
-void setup() {
-	Serial.begin(115200);
-// Initialize the output variables as outputs
-	pinMode(redLED, OUTPUT);
-// Set outputs to LOW
-	digitalWrite(redLED, LOW);
+void initialize() {
+	openDoor();
 
-// Connect to Wi-Fi network with SSID and password
-	Serial.print("Connecting to ");
-	Serial.println(ssid);
-	WiFi.begin(ssid, password);
-	while (WiFi.status() != WL_CONNECTED) {
-		delay(500);
-		Serial.print(".");
+	for (int i = 0; i < 5; i++) {
+		digitalWrite(yellowLED_pin, HIGH);
+		delay(50);
+		digitalWrite(yellowLED_pin, LOW);
+		delay(50);
 	}
-// Print local IP address and start web server
-	Serial.println("");
-	Serial.println("WiFi connected.");
-	Serial.println("IP address: ");
-	Serial.println(WiFi.localIP());
-	server.begin();
+	delay(1000);
+	closeDoor();
+	digitalWrite(yellowLED_pin, HIGH);
+}
+
+void openDoor() {
+	while (digitalRead(openDoorSwitch_pin) == HIGH) {
+    myservo.write(45);//OPEN DOOR
+    Serial.println("SERVO MOVING");
+    digitalWrite(greenLED_pin, LOW);
+}
+myservo.write(90);
+}
+
+void closeDoor() {
+	myservo.write(150);
+	delay(closeDoorTime);
+	digitalWrite(greenLED_pin, HIGH);
+	myservo.write(90);
+}
+void pinSetup() {
+	myservo.attach(servo_pin);
+	myservo.writeMicroseconds(1500);
+	pinMode(openDoorSwitch_pin, INPUT_PULLUP);
+	pinMode(greenLED_pin, OUTPUT);
+	pinMode(yellowLED_pin, OUTPUT);
+	digitalWrite(greenLED_pin, LOW);
+	digitalWrite(yellowLED_pin, LOW);
+	myservo.write(90);
 }
 
 void webserverHandle(){
@@ -75,14 +98,14 @@ if (c == '\n') { // if the byte is a newline character
 		client.println();
 
 // turns the GPIOs on and off
-		if (header.indexOf("GET /2/on") >= 0) {
+		if (header.indexOf("GET /2/on") >= 0 && doorOpenState=="off") {
 			Serial.println("RED LED is on");
-			outputRedState = "on";
-			digitalWrite(redLED, HIGH);
-		} else if (header.indexOf("GET /2/off") >= 0) {
+			doorOpenState = "on";
+			openDoor();
+		} else if (header.indexOf("GET /2/off") >= 0 && doorOpenState=="on") {
 			Serial.println("RED LED is off");
-			outputRedState = "off";
-			digitalWrite(redLED, LOW);
+			doorOpenState = "off";
+			closeDoor();
 		} 
 
 // Display the HTML web page
@@ -100,9 +123,9 @@ if (c == '\n') { // if the byte is a newline character
 		client.println("<body><h1>My LED Control Server</h1>");
 
 // Display current state, and ON/OFF buttons for GPIO 2 Red LED 
-		client.println("<p>Red LED is " + outputRedState + "</p>");
-// If the outputRedState is off, it displays the OFF button 
-		if (outputRedState=="off") {
+		client.println("<p>Red LED is " + doorOpenState + "</p>");
+// If the doorOpenState is off, it displays the OFF button 
+		if (doorOpenState=="off") {
 			client.println("<p><a href=\"/2/on\"><button class=\"button buttonOff\">OFF</button></a></p>");
 		} else {
 			client.println("<p><a href=\"/2/off\"><button class=\"button buttonRed\">ON</button></a></p>");
@@ -127,9 +150,33 @@ Serial.println("Client disconnected.");
 Serial.println("");
 }
 }
+void WiFiSetup(){
+	// Connect to Wi-Fi network with SSID and password
+	Serial.print("Connecting to ");
+	Serial.println(ssid);
+	WiFi.begin(ssid, password);
+	while (WiFi.status() != WL_CONNECTED) {
+		delay(500);
+		Serial.print(".");
+	}
+// Print local IP address and start web server
+	Serial.println("");
+	Serial.println("WiFi connected.");
+	Serial.println("IP address: ");
+	Serial.println(WiFi.localIP());
+	server.begin();
+}
+void setup() {
+	Serial.begin(115200);
+// Initialize the output variables as outputs
+	pinSetup();
+  //Serial.println("pinSetup Finished.");
+	initialize();
+//WiFi Setup
+	WiFiSetup();
+}
 
 void loop(){
-
 	webserverHandle();
 
 }
