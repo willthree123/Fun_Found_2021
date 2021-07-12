@@ -1,11 +1,16 @@
 //edit version
 #include <Servo.h>
 #include <ESP8266WiFi.h>
+#include <Adafruit_NeoPixel.h>
+#ifdef __AVR__
+ #include <avr/power.h> 
+#endif
 
-#define servo_pin D1
-#define openDoorSwitch_pin D2
-#define greenLED_pin D0
-#define yellowLED_pin D4
+#define servo_pin D1 //Servo Motor Pin
+#define openDoorSwitch_pin D2 //Door limit switch pin
+#define LED_PIN D3 //Neopixel pin
+#define NUMPIXELS 1 //Number of Neopixels
+#define ledTimeout 5000
 #define closeDoorTime 250
 
 // Enter your wifi network name and Wifi Password
@@ -15,19 +20,21 @@ const char* password = "12qwaszx";
 // Set web server port number to 80
 WiFiServer server(80);
 Servo myservo;
+Adafruit_NeoPixel pixels(NUMPIXELS, LED_PIN, NEO_GRB + NEO_KHZ800);
 // Variable to store the HTTP request
 String header;
 
 // These variables store current output state of LED
 String doorOpenState = "off";
 
-// Assign output variables to GPIO pins
-const int redLED = 2;
-
 // Current time
 unsigned long currentTime = millis();
 // Previous time
 unsigned long previousTime = 0; 
+
+//led timeout
+unsigned long  ledPreviousTime;
+bool ledStatus;
 // Define timeout time in milliseconds (example: 2000ms = 2s)
 const long timeoutTime = 2000;
 
@@ -35,39 +42,60 @@ void initialize() {
 	openDoor();
 
 	for (int i = 0; i < 5; i++) {
-		digitalWrite(yellowLED_pin, HIGH);
-		delay(50);
-		digitalWrite(yellowLED_pin, LOW);
-		delay(50);
+		pixels.setPixelColor(0, pixels.Color(70, 70, 0));
+		pixels.show();
+		delay(100);
+		pixels.setPixelColor(0, pixels.Color(0, 0, 0));
+		pixels.show();
+		delay(100);
 	}
 	delay(1000);
 	closeDoor();
-	digitalWrite(yellowLED_pin, HIGH);
+	pixels.setPixelColor(0, pixels.Color(70, 70, 0));
+	pixels.show();
+	ledStatus=HIGH;
+	ledPreviousTime =  millis();
 }
 
 void openDoor() {
 	while (digitalRead(openDoorSwitch_pin) == HIGH) {
     myservo.write(45);//OPEN DOOR
     Serial.println("SERVO MOVING");
-    digitalWrite(greenLED_pin, LOW);
+    pixels.setPixelColor(0, pixels.Color(70, 70, 0));
+    pixels.show();
 }
+pixels.setPixelColor(0, pixels.Color(0, 70, 0));
+pixels.show();
 myservo.write(90);
+ledStatus=HIGH;
+ledPreviousTime =  millis();
 }
 
 void closeDoor() {
 	myservo.write(150);
+	pixels.setPixelColor(0, pixels.Color(70, 70, 0));
+	pixels.show();
 	delay(closeDoorTime);
-	digitalWrite(greenLED_pin, HIGH);
+	pixels.setPixelColor(0, pixels.Color(70, 0, 0));
+	pixels.show();
+	ledStatus=HIGH;
+	ledPreviousTime =  millis();
 	myservo.write(90);
+}
+void ledTimeoutCheck(){
+	if(millis()-ledPreviousTime >= ledTimeout && ledStatus!= LOW){
+		pixels.setPixelColor(0, pixels.Color(0, 0, 0));
+		pixels.show();
+		Serial.println("led off");
+		ledStatus=LOW;
+	}
 }
 void pinSetup() {
 	myservo.attach(servo_pin);
 	myservo.writeMicroseconds(1500);
 	pinMode(openDoorSwitch_pin, INPUT_PULLUP);
-	pinMode(greenLED_pin, OUTPUT);
-	pinMode(yellowLED_pin, OUTPUT);
-	digitalWrite(greenLED_pin, LOW);
-	digitalWrite(yellowLED_pin, LOW);
+	pixels.begin(); // INITIALIZE NeoPixel strip object (REQUIRED)
+	pixels.clear();
 	myservo.write(90);
 }
 
@@ -178,5 +206,6 @@ void setup() {
 
 void loop(){
 	webserverHandle();
+	ledTimeoutCheck();
 
 }
